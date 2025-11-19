@@ -1,6 +1,5 @@
 import { Connection, PublicKey, SystemProgram, Transaction, clusterApiUrl } from "https://esm.sh/@solana/web3.js";
 import { Token, TOKEN_PROGRAM_ID } from "https://cdn.jsdelivr.net/npm/@solana/spl-token@0.3.9/lib/index.iife.js";
-import { WalletAdapter, WalletError } from "https://cdn.jsdelivr.net/npm/@solana/wallet-adapter-base@0.10.0/dist/index.umd.js";
 import { PhantomWalletAdapter, SolflareWalletAdapter, SlopeWalletAdapter } from "https://cdn.jsdelivr.net/npm/@solana/wallet-adapter-wallets@0.10.0/dist/index.umd.js";
 
 // --- Setup ---
@@ -79,33 +78,59 @@ createBtn.onclick = () => {
         <p><strong>Memo:</strong> ${invoice.memo || "(none)"}</p>
     `;
 
+    // QR for mobile/watch wallets
     qrDiv.innerHTML = `<img src="https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(JSON.stringify(invoice))}">
-                       <div class="muted">Scan with mobile/watch wallet</div>`;
+                       <div class="muted">Scan with mobile/watch wallet to pay</div>`;
 
     payBtn.disabled = false;
     statusEl.textContent = "Invoice ready. Click Pay to continue.";
 };
 
-// --- Pay Invoice ---
+// --- Pay Invoice (Universal: Desktop & Watch) ---
 payBtn.onclick = async () => {
     if (!invoice) return alert("Create invoice first");
     if (!selectedWallet || !walletPublicKey) return alert("Connect wallet first");
 
     try {
-        if (invoice.tokenMint === "") {
-            // SOL Transfer
+        statusEl.textContent = "Preparing transaction...";
+        let tx;
+
+        if (!invoice.tokenMint) {
+            // SOL transfer
             const lamports = Math.round(invoice.amount * 1_000_000_000);
-            const tx = new Transaction().add(
+            tx = new Transaction().add(
                 SystemProgram.transfer({
                     fromPubkey: walletPublicKey,
                     toPubkey: new PublicKey(invoice.recipient),
                     lamports
                 })
             );
-            tx.feePayer = walletPublicKey;
-            const { blockhash } = await connection.getLatestBlockhash();
-            tx.recentBlockhash = blockhash;
+        } else {
+            // SPL token transfer
+            const mintPubkey = new PublicKey(invoice.tokenMint);
+            const token = new Token(connection, mintPubkey, TOKEN_PROGRAM_ID, selectedWallet);
+            const fromTokenAccount = await token.getOrCreateAssociatedAccountInfo(walletPublicKey);
+            const toTokenAccount = await token.getOrCreateAssociatedAccountInfo(new PublicKey(invoice.recipient));
+            const decimals = (await token.getMintInfo()).decimals;
 
+            tx = new Transaction().add(
+                Token.createTransferInstruction(
+                    TOKEN_PROGRAM_ID,
+                    fromTokenAccount.address,
+                    toTokenAccount.address,
+                    walletPublicKey,
+                    [],
+                    invoice.amount * (10 ** decimals)
+                )
+            );
+        }
+
+        tx.feePayer = walletPublicKey;
+        tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+        // Detect mobile/watch wallets that cannot sign in-page
+        if (selectedWallet.signTransaction) {
+            // Desktop wallets
             statusEl.textContent = "Waiting for wallet to sign...";
             const signed = await selectedWallet.signTransaction(tx);
             const sig = await connection.sendRawTransaction(signed.serialize());
@@ -113,32 +138,13 @@ payBtn.onclick = async () => {
             await connection.confirmTransaction(sig, "confirmed");
             statusEl.textContent = `Payment successful! Tx: ${sig}`;
         } else {
-            // SPL Token Transfer
-            const mintPubkey = new PublicKey(invoice.tokenMint);
-            const token = new Token(connection, mintPubkey, TOKEN_PROGRAM_ID, selectedWallet);
-            const fromTokenAccount = await token.getOrCreateAssociatedAccountInfo(walletPublicKey);
-            const toTokenAccount = await token.getOrCreateAssociatedAccountInfo(new PublicKey(invoice.recipient));
-            const tx = new Transaction().add(
-                Token.createTransferInstruction(
-                    TOKEN_PROGRAM_ID,
-                    fromTokenAccount.address,
-                    toTokenAccount.address,
-                    walletPublicKey,
-                    [],
-                    invoice.amount * (10 ** (await token.getMintInfo()).decimals)
-                )
-            );
-            tx.feePayer = walletPublicKey;
-            const { blockhash } = await connection.getLatestBlockhash();
-            tx.recentBlockhash = blockhash;
-
-            statusEl.textContent = "Waiting for wallet to sign SPL token transfer...";
-            const signed = await selectedWallet.signTransaction(tx);
-            const sig = await connection.sendRawTransaction(signed.serialize());
-            statusEl.textContent = `Transaction submitted: ${sig}. Confirming...`;
-            await connection.confirmTransaction(sig, "confirmed");
-            statusEl.textContent = `SPL Payment successful! Tx: ${sig}`;
+            // Mobile/watch wallets → show QR (deeplink)
+            const payload = Buffer.from(tx.serialize({ requireAllSignatures: false })).toString("base64");
+            qrDiv.innerHTML = `<img src="https://chart.googleapis.com/chart?cht=qr&chs=250x250&chl=${encodeURIComponent(payload)}">
+                               <div class="muted">Scan with your wallet to approve</div>`;
+            statusEl.textContent = "Scan QR with wallet to approve transaction";
         }
+
     } catch (err) {
         console.error(err);
         statusEl.textContent = `Payment failed: ${err.message || err}`;
