@@ -5,27 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Phantom Watch SOL Payment</title>
 <link rel="stylesheet" href="style.css">
-
-<script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.78.0/lib/index.iife.js"></script>
 </head>
 <body>
 <h1>Phantom Watch SOL Payment</h1>
 
 <div class="card">
-  <h3>Create Payment</h3>
+  <h3>Payment Details</h3>
+
   <label>Amount (SOL):</label>
   <input type="number" id="amount" step="0.01" value="0.1">
 
   <label>Memo (optional):</label>
   <input type="text" id="memo" placeholder="Payment description">
 
-  <button id="createBtn">Create Payment QR</button>
+  <p>Payable SOL Address: <strong id="recipientAddress"></strong></p>
+
+  <button id="generateBtn">Generate Payment QR</button>
 </div>
 
 <div class="card" id="qrCard" style="display:none">
-  <h3>Scan to Pay</h3>
+  <h3>Scan QR to Pay</h3>
   <div id="qr"></div>
-  <p id="status" class="muted">Scan QR with Phantom watch wallet to approve.</p>
+  <p id="status" class="muted">Scan QR with Phantom Watch Wallet to approve.</p>
 </div>
 
 <script type="module" src="app.js"></script>
