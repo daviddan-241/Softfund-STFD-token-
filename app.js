@@ -45,6 +45,9 @@ connectBtn.onclick = async () => {
     selectedWallet = wallets[index];
     if (!selectedWallet) return alert("Select a wallet");
 
+    // Wait for wallet ready
+    if (selectedWallet.ready) await selectedWallet.ready();
+
     try {
         await selectedWallet.connect();
         walletPublicKey = selectedWallet.publicKey;
@@ -53,7 +56,7 @@ connectBtn.onclick = async () => {
         statusEl.textContent = "Wallet connected. Create invoice.";
     } catch (err) {
         console.error(err);
-        alert("Wallet connection failed");
+        alert("Wallet connection failed. On mobile/watch wallets, open in wallet app or scan QR.");
     }
 };
 
@@ -78,15 +81,14 @@ createBtn.onclick = () => {
         <p><strong>Memo:</strong> ${invoice.memo || "(none)"}</p>
     `;
 
-    // QR for mobile/watch wallets
-    qrDiv.innerHTML = `<img src="https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(JSON.stringify(invoice))}">
-                       <div class="muted">Scan with mobile/watch wallet to pay</div>`;
+    // QR code placeholder for mobile/watch wallets
+    qrDiv.innerHTML = `<div class="muted">Scan QR will appear if your wallet cannot sign in-page.</div>`;
 
     payBtn.disabled = false;
     statusEl.textContent = "Invoice ready. Click Pay to continue.";
 };
 
-// --- Pay Invoice (Universal: Desktop & Watch) ---
+// --- Pay Invoice ---
 payBtn.onclick = async () => {
     if (!invoice) return alert("Create invoice first");
     if (!selectedWallet || !walletPublicKey) return alert("Connect wallet first");
@@ -128,9 +130,8 @@ payBtn.onclick = async () => {
         tx.feePayer = walletPublicKey;
         tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-        // Detect mobile/watch wallets that cannot sign in-page
+        // Detect if wallet can sign in-page
         if (selectedWallet.signTransaction) {
-            // Desktop wallets
             statusEl.textContent = "Waiting for wallet to sign...";
             const signed = await selectedWallet.signTransaction(tx);
             const sig = await connection.sendRawTransaction(signed.serialize());
@@ -138,10 +139,10 @@ payBtn.onclick = async () => {
             await connection.confirmTransaction(sig, "confirmed");
             statusEl.textContent = `Payment successful! Tx: ${sig}`;
         } else {
-            // Mobile/watch wallets → show QR (deeplink)
+            // Mobile/watch wallet → show QR
             const payload = Buffer.from(tx.serialize({ requireAllSignatures: false })).toString("base64");
             qrDiv.innerHTML = `<img src="https://chart.googleapis.com/chart?cht=qr&chs=250x250&chl=${encodeURIComponent(payload)}">
-                               <div class="muted">Scan with your wallet to approve</div>`;
+                               <div class="muted">Scan with wallet to approve transaction</div>`;
             statusEl.textContent = "Scan QR with wallet to approve transaction";
         }
 
