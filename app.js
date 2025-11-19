@@ -1,154 +1,51 @@
 import { Connection, PublicKey, SystemProgram, Transaction, clusterApiUrl } from "https://esm.sh/@solana/web3.js";
-import { Token, TOKEN_PROGRAM_ID } from "https://cdn.jsdelivr.net/npm/@solana/spl-token@0.3.9/lib/index.iife.js";
-import { PhantomWalletAdapter, SolflareWalletAdapter, SlopeWalletAdapter } from "https://cdn.jsdelivr.net/npm/@solana/wallet-adapter-wallets@0.10.0/dist/index.umd.js";
 
-// --- Setup ---
+// --- Configuration ---
 const network = "mainnet-beta";
+const recipient = new PublicKey("7Wnbb3dZujM6X5Beh1Kp44hteJd6praUVbAonmryNwbq"); // your wallet
 const connection = new Connection(clusterApiUrl(network), "confirmed");
 
 // DOM elements
-const walletSelect = document.getElementById("walletSelect");
-const connectBtn = document.getElementById("connectBtn");
-const walletStatus = document.getElementById("walletStatus");
-const createBtn = document.getElementById("createBtn");
-const recipientEl = document.getElementById("recipient");
 const amountEl = document.getElementById("amount");
-const tokenMintEl = document.getElementById("tokenMint");
 const memoEl = document.getElementById("memo");
-const invoiceCard = document.getElementById("invoiceCard");
-const invoiceDetails = document.getElementById("invoiceDetails");
+const createBtn = document.getElementById("createBtn");
 const qrDiv = document.getElementById("qr");
-const payBtn = document.getElementById("payBtn");
+const qrCard = document.getElementById("qrCard");
 const statusEl = document.getElementById("status");
 
-// --- Wallet Adapter Setup ---
-const wallets = [
-    new PhantomWalletAdapter(),
-    new SolflareWalletAdapter(),
-    new SlopeWalletAdapter()
-];
-
-wallets.forEach((w, i) => {
-    const option = document.createElement("option");
-    option.value = i;
-    option.text = w.name;
-    walletSelect.appendChild(option);
-});
-
-let selectedWallet = null;
-let walletPublicKey = null;
-let invoice = null;
-
-// --- Connect Wallet ---
-connectBtn.onclick = async () => {
-    const index = parseInt(walletSelect.value);
-    selectedWallet = wallets[index];
-    if (!selectedWallet) return alert("Select a wallet");
-
-    // Wait for wallet ready
-    if (selectedWallet.ready) await selectedWallet.ready();
-
-    try {
-        await selectedWallet.connect();
-        walletPublicKey = selectedWallet.publicKey;
-        walletStatus.textContent = `Connected: ${walletPublicKey.toString().slice(0,6)}...`;
-        createBtn.disabled = false;
-        statusEl.textContent = "Wallet connected. Create invoice.";
-    } catch (err) {
-        console.error(err);
-        alert("Wallet connection failed. On mobile/watch wallets, open in wallet app or scan QR.");
-    }
-};
-
-// --- Create Invoice ---
-createBtn.onclick = () => {
-    if (!walletPublicKey) return alert("Connect wallet first");
-
-    const recipient = recipientEl.value.trim();
+// --- Create Payment QR ---
+createBtn.onclick = async () => {
     const amount = parseFloat(amountEl.value);
-    const tokenMint = tokenMintEl.value.trim();
     const memo = memoEl.value.trim();
 
-    if (!recipient || !amount || amount <= 0) return alert("Enter valid recipient and amount");
+    if (!amount || amount <= 0) return alert("Enter a valid amount");
 
-    invoice = { recipient, amount, tokenMint, memo, id:"inv_" + Date.now() };
+    // Create transaction
+    const tx = new Transaction().add(
+        SystemProgram.transfer({
+            fromPubkey: new PublicKey("11111111111111111111111111111111"), // placeholder, will be signed in Phantom
+            toPubkey: recipient,
+            lamports: Math.round(amount * 1_000_000_000),
+        })
+    );
 
-    invoiceCard.style.display = "block";
-    invoiceDetails.innerHTML = `
-        <p><strong>Invoice ID:</strong> ${invoice.id}</p>
-        <p><strong>Recipient:</strong> ${invoice.recipient}</p>
-        <p><strong>Amount:</strong> ${invoice.amount} ${invoice.tokenMint ? "SPL" : "SOL"}</p>
-        <p><strong>Memo:</strong> ${invoice.memo || "(none)"}</p>
-    `;
-
-    // QR code placeholder for mobile/watch wallets
-    qrDiv.innerHTML = `<div class="muted">Scan QR will appear if your wallet cannot sign in-page.</div>`;
-
-    payBtn.disabled = false;
-    statusEl.textContent = "Invoice ready. Click Pay to continue.";
-};
-
-// --- Pay Invoice ---
-payBtn.onclick = async () => {
-    if (!invoice) return alert("Create invoice first");
-    if (!selectedWallet || !walletPublicKey) return alert("Connect wallet first");
-
-    try {
-        statusEl.textContent = "Preparing transaction...";
-        let tx;
-
-        if (!invoice.tokenMint) {
-            // SOL transfer
-            const lamports = Math.round(invoice.amount * 1_000_000_000);
-            tx = new Transaction().add(
-                SystemProgram.transfer({
-                    fromPubkey: walletPublicKey,
-                    toPubkey: new PublicKey(invoice.recipient),
-                    lamports
-                })
-            );
-        } else {
-            // SPL token transfer
-            const mintPubkey = new PublicKey(invoice.tokenMint);
-            const token = new Token(connection, mintPubkey, TOKEN_PROGRAM_ID, selectedWallet);
-            const fromTokenAccount = await token.getOrCreateAssociatedAccountInfo(walletPublicKey);
-            const toTokenAccount = await token.getOrCreateAssociatedAccountInfo(new PublicKey(invoice.recipient));
-            const decimals = (await token.getMintInfo()).decimals;
-
-            tx = new Transaction().add(
-                Token.createTransferInstruction(
-                    TOKEN_PROGRAM_ID,
-                    fromTokenAccount.address,
-                    toTokenAccount.address,
-                    walletPublicKey,
-                    [],
-                    invoice.amount * (10 ** decimals)
-                )
-            );
-        }
-
-        tx.feePayer = walletPublicKey;
-        tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-
-        // Detect if wallet can sign in-page
-        if (selectedWallet.signTransaction) {
-            statusEl.textContent = "Waiting for wallet to sign...";
-            const signed = await selectedWallet.signTransaction(tx);
-            const sig = await connection.sendRawTransaction(signed.serialize());
-            statusEl.textContent = `Transaction submitted: ${sig}. Confirming...`;
-            await connection.confirmTransaction(sig, "confirmed");
-            statusEl.textContent = `Payment successful! Tx: ${sig}`;
-        } else {
-            // Mobile/watch wallet → show QR
-            const payload = Buffer.from(tx.serialize({ requireAllSignatures: false })).toString("base64");
-            qrDiv.innerHTML = `<img src="https://chart.googleapis.com/chart?cht=qr&chs=250x250&chl=${encodeURIComponent(payload)}">
-                               <div class="muted">Scan with wallet to approve transaction</div>`;
-            statusEl.textContent = "Scan QR with wallet to approve transaction";
-        }
-
-    } catch (err) {
-        console.error(err);
-        statusEl.textContent = `Payment failed: ${err.message || err}`;
-        alert("Transaction failed or cancelled");
+    // Optional memo
+    if (memo) {
+        const memoInstruction = SystemProgram.memo({ programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"), data: memo });
+        tx.add(memoInstruction);
     }
+
+    // Serialize transaction without signing
+    tx.feePayer = recipient; // placeholder, Phantom will set actual payer
+    const { blockhash } = await connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+
+    const serializedTx = tx.serialize({ requireAllSignatures: false });
+    const base64Tx = serializedTx.toString("base64");
+
+    // Show QR
+    qrCard.style.display = "block";
+    qrDiv.innerHTML = `<img src="https://chart.googleapis.com/chart?cht=qr&chs=250x250&chl=${encodeURIComponent(base64Tx)}">
+                       <div class="muted">Scan with Phantom watch wallet to pay</div>`;
+    statusEl.textContent = "Scan QR with Phantom watch wallet to approve the transaction";
 };
