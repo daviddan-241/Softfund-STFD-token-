@@ -1,110 +1,147 @@
 import { Connection, PublicKey, SystemProgram, Transaction, clusterApiUrl } from "https://esm.sh/@solana/web3.js";
+import { Token, TOKEN_PROGRAM_ID } from "https://cdn.jsdelivr.net/npm/@solana/spl-token@0.3.9/lib/index.iife.js";
+import { WalletAdapter, WalletError } from "https://cdn.jsdelivr.net/npm/@solana/wallet-adapter-base@0.10.0/dist/index.umd.js";
+import { PhantomWalletAdapter, SolflareWalletAdapter, SlopeWalletAdapter } from "https://cdn.jsdelivr.net/npm/@solana/wallet-adapter-wallets@0.10.0/dist/index.umd.js";
 
-// QR generator
-function generateQR(text) {
-  return `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(text)}`;
-}
-
+// --- Setup ---
 const network = "mainnet-beta";
 const connection = new Connection(clusterApiUrl(network), "confirmed");
 
-let provider = null;
-let walletPubKey = null;
-let invoice = null;
-
 // DOM elements
+const walletSelect = document.getElementById("walletSelect");
 const connectBtn = document.getElementById("connectBtn");
+const walletStatus = document.getElementById("walletStatus");
 const createBtn = document.getElementById("createBtn");
-const payBtn = document.getElementById("payBtn");
 const recipientEl = document.getElementById("recipient");
 const amountEl = document.getElementById("amount");
+const tokenMintEl = document.getElementById("tokenMint");
 const memoEl = document.getElementById("memo");
 const invoiceCard = document.getElementById("invoiceCard");
 const invoiceDetails = document.getElementById("invoiceDetails");
 const qrDiv = document.getElementById("qr");
+const payBtn = document.getElementById("payBtn");
 const statusEl = document.getElementById("status");
 
-function phantomProvider() {
-  return window.solana?.isPhantom ? window.solana : null;
-}
+// --- Wallet Adapter Setup ---
+const wallets = [
+    new PhantomWalletAdapter(),
+    new SolflareWalletAdapter(),
+    new SlopeWalletAdapter()
+];
 
-// Connect Phantom Wallet
+wallets.forEach((w, i) => {
+    const option = document.createElement("option");
+    option.value = i;
+    option.text = w.name;
+    walletSelect.appendChild(option);
+});
+
+let selectedWallet = null;
+let walletPublicKey = null;
+let invoice = null;
+
+// --- Connect Wallet ---
 connectBtn.onclick = async () => {
-  provider = phantomProvider();
-  if (!provider) {
-    alert("Phantom Wallet not found. Use Phantom browser or install extension.");
-    return;
-  }
-  try {
-    const resp = await provider.connect();
-    walletPubKey = resp.publicKey;
-    connectBtn.textContent = `Connected: ${walletPubKey.toString().slice(0,6)}...`;
-    createBtn.disabled = false;
-    statusEl.textContent = "Phantom connected. You can now create invoice.";
-  } catch (e) {
-    console.error(e);
-    alert("Connection failed or cancelled");
-  }
+    const index = parseInt(walletSelect.value);
+    selectedWallet = wallets[index];
+    if (!selectedWallet) return alert("Select a wallet");
+
+    try {
+        await selectedWallet.connect();
+        walletPublicKey = selectedWallet.publicKey;
+        walletStatus.textContent = `Connected: ${walletPublicKey.toString().slice(0,6)}...`;
+        createBtn.disabled = false;
+        statusEl.textContent = "Wallet connected. Create invoice.";
+    } catch (err) {
+        console.error(err);
+        alert("Wallet connection failed");
+    }
 };
 
-// Create Invoice
+// --- Create Invoice ---
 createBtn.onclick = () => {
-  if (!walletPubKey) { alert("Connect Phantom first!"); return; }
-  const recipient = recipientEl.value.trim();
-  const amount = parseFloat(amountEl.value);
-  if (!recipient || !amount || amount <= 0) { alert("Enter valid recipient and amount."); return; }
+    if (!walletPublicKey) return alert("Connect wallet first");
 
-  invoice = {
-    recipient,
-    amount,
-    memo: memoEl.value.trim(),
-    id: "inv_" + Date.now()
-  };
+    const recipient = recipientEl.value.trim();
+    const amount = parseFloat(amountEl.value);
+    const tokenMint = tokenMintEl.value.trim();
+    const memo = memoEl.value.trim();
 
-  invoiceCard.style.display = "block";
-  invoiceDetails.innerHTML = `
-    <p><strong>Invoice ID:</strong> ${invoice.id}</p>
-    <p><strong>Recipient:</strong> ${invoice.recipient}</p>
-    <p><strong>Amount:</strong> ${invoice.amount} SOL</p>
-    <p><strong>Memo:</strong> ${invoice.memo || "(none)"}</p>
-  `;
+    if (!recipient || !amount || amount <= 0) return alert("Enter valid recipient and amount");
 
-  qrDiv.innerHTML = `<img src="${generateQR(JSON.stringify(invoice))}">
-                     <div class="muted">Scan with Phantom mobile browser</div>`;
+    invoice = { recipient, amount, tokenMint, memo, id:"inv_" + Date.now() };
 
-  payBtn.disabled = false;
-  statusEl.textContent = "Invoice ready. Click Pay to continue.";
+    invoiceCard.style.display = "block";
+    invoiceDetails.innerHTML = `
+        <p><strong>Invoice ID:</strong> ${invoice.id}</p>
+        <p><strong>Recipient:</strong> ${invoice.recipient}</p>
+        <p><strong>Amount:</strong> ${invoice.amount} ${invoice.tokenMint ? "SPL" : "SOL"}</p>
+        <p><strong>Memo:</strong> ${invoice.memo || "(none)"}</p>
+    `;
+
+    qrDiv.innerHTML = `<img src="https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(JSON.stringify(invoice))}">
+                       <div class="muted">Scan with mobile/watch wallet</div>`;
+
+    payBtn.disabled = false;
+    statusEl.textContent = "Invoice ready. Click Pay to continue.";
 };
 
-// Pay with Phantom
+// --- Pay Invoice ---
 payBtn.onclick = async () => {
-  if (!invoice) { alert("Create invoice first."); return; }
-  if (!provider || !walletPubKey) { alert("Connect Phantom first."); return; }
+    if (!invoice) return alert("Create invoice first");
+    if (!selectedWallet || !walletPublicKey) return alert("Connect wallet first");
 
-  try {
-    const lamports = Math.round(invoice.amount * 1_000_000_000); // SOL -> lamports
-    const tx = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: walletPubKey,
-        toPubkey: new PublicKey(invoice.recipient),
-        lamports
-      })
-    );
+    try {
+        if (invoice.tokenMint === "") {
+            // SOL Transfer
+            const lamports = Math.round(invoice.amount * 1_000_000_000);
+            const tx = new Transaction().add(
+                SystemProgram.transfer({
+                    fromPubkey: walletPublicKey,
+                    toPubkey: new PublicKey(invoice.recipient),
+                    lamports
+                })
+            );
+            tx.feePayer = walletPublicKey;
+            const { blockhash } = await connection.getLatestBlockhash();
+            tx.recentBlockhash = blockhash;
 
-    tx.feePayer = walletPubKey;
-    const { blockhash } = await connection.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
+            statusEl.textContent = "Waiting for wallet to sign...";
+            const signed = await selectedWallet.signTransaction(tx);
+            const sig = await connection.sendRawTransaction(signed.serialize());
+            statusEl.textContent = `Transaction submitted: ${sig}. Confirming...`;
+            await connection.confirmTransaction(sig, "confirmed");
+            statusEl.textContent = `Payment successful! Tx: ${sig}`;
+        } else {
+            // SPL Token Transfer
+            const mintPubkey = new PublicKey(invoice.tokenMint);
+            const token = new Token(connection, mintPubkey, TOKEN_PROGRAM_ID, selectedWallet);
+            const fromTokenAccount = await token.getOrCreateAssociatedAccountInfo(walletPublicKey);
+            const toTokenAccount = await token.getOrCreateAssociatedAccountInfo(new PublicKey(invoice.recipient));
+            const tx = new Transaction().add(
+                Token.createTransferInstruction(
+                    TOKEN_PROGRAM_ID,
+                    fromTokenAccount.address,
+                    toTokenAccount.address,
+                    walletPublicKey,
+                    [],
+                    invoice.amount * (10 ** (await token.getMintInfo()).decimals)
+                )
+            );
+            tx.feePayer = walletPublicKey;
+            const { blockhash } = await connection.getLatestBlockhash();
+            tx.recentBlockhash = blockhash;
 
-    statusEl.textContent = "Waiting for Phantom to sign transaction...";
-    const signedTx = await provider.signTransaction(tx);
-    statusEl.textContent = "Sending transaction...";
-    const signature = await connection.sendRawTransaction(signedTx.serialize());
-    statusEl.textContent = `Transaction submitted: ${signature}. Confirming...`;
-    await connection.confirmTransaction(signature, "confirmed");
-    statusEl.textContent = `Payment successful! Tx: ${signature}`;
-  } catch (err) {
-    console.error(err);
-    statusEl.textContent = `Payment failed: ${err.message || err}`;
-    alert("Transaction failed or cancelled. Check Phantom wallet.");
-  }
+            statusEl.textContent = "Waiting for wallet to sign SPL token transfer...";
+            const signed = await selectedWallet.signTransaction(tx);
+            const sig = await connection.sendRawTransaction(signed.serialize());
+            statusEl.textContent = `Transaction submitted: ${sig}. Confirming...`;
+            await connection.confirmTransaction(sig, "confirmed");
+            statusEl.textContent = `SPL Payment successful! Tx: ${sig}`;
+        }
+    } catch (err) {
+        console.error(err);
+        statusEl.textContent = `Payment failed: ${err.message || err}`;
+        alert("Transaction failed or cancelled");
+    }
 };
