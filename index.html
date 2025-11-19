@@ -3,48 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Universal Solana Payment DApp</title>
+<title>Phantom Watch SOL Payment</title>
 <link rel="stylesheet" href="style.css">
 
-<!-- Solana & Wallet Adapter -->
 <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.78.0/lib/index.iife.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@solana/spl-token@0.3.9/lib/index.iife.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@solana/wallet-adapter-base@0.10.0/dist/index.umd.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@solana/wallet-adapter-wallets@0.10.0/dist/index.umd.js"></script>
 </head>
 <body>
-<h1>Universal Solana Payment DApp</h1>
-
-<div class="card">
-  <h3>Connect Wallet</h3>
-  <select id="walletSelect"></select>
-  <button id="connectBtn">Connect Wallet</button>
-  <p id="walletStatus" class="muted"></p>
-</div>
+<h1>Phantom Watch SOL Payment</h1>
 
 <div class="card">
   <h3>Create Payment</h3>
-  <label>Recipient Wallet:</label>
-  <input type="text" id="recipient" value="7Wnbb3dZujM6X5Beh1Kp44hteJd6praUVbAonmryNwbq">
-
   <label>Amount (SOL):</label>
   <input type="number" id="amount" step="0.01" value="0.1">
-
-  <label>Token Mint (optional for SPL):</label>
-  <input type="text" id="tokenMint" placeholder="Leave blank for SOL">
 
   <label>Memo (optional):</label>
   <input type="text" id="memo" placeholder="Payment description">
 
-  <button id="createBtn" disabled>Create Invoice</button>
+  <button id="createBtn">Create Payment QR</button>
 </div>
 
-<div class="card" id="invoiceCard" style="display:none">
-  <h3>Invoice</h3>
-  <div id="invoiceDetails"></div>
+<div class="card" id="qrCard" style="display:none">
+  <h3>Scan to Pay</h3>
   <div id="qr"></div>
-  <button id="payBtn">Pay</button>
-  <p id="status" class="muted">Status: waiting</p>
+  <p id="status" class="muted">Scan QR with Phantom watch wallet to approve.</p>
 </div>
 
 <script type="module" src="app.js"></script>
