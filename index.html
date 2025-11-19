@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solana Payment DApp</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Solana Payment DApp</h1>
+
+  <div class="card">
+    <h3>Create Payment</h3>
+    <label>Recipient Wallet:</label>
+    <input type="text" id="recipient" value="7Wnbb3dZujM6X5Beh1Kp44hteJd6praUVbAonmryNwbq">
+
+    <label>Amount (SOL):</label>
+    <input type="number" id="amount" step="0.01" value="0.1">
+
+    <label>Memo (optional):</label>
+    <input type="text" id="memo" placeholder="Payment description">
+
+    <button id="connectBtn">Connect Phantom Wallet</button>
+    <button id="createBtn" disabled>Create Invoice</button>
+  </div>
+
+  <div class="card" id="invoiceCard" style="display:none">
+    <h3>Invoice</h3>
+    <div id="invoiceDetails"></div>
+    <div id="qr"></div>
+    <button id="payBtn">Pay with Phantom</button>
+    <div class="muted" id="status">Status: waiting</div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
