@@ -3,11 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Solana Payment DApp</title>
+  <title>Universal Solana Payment DApp</title>
   <link rel="stylesheet" href="style.css">
+
+  <!-- Solana Wallet Adapter -->
+  <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.78.0/lib/index.iife.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@solana/spl-token@0.3.9/lib/index.iife.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@solana/wallet-adapter-base@0.10.0/dist/index.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@solana/wallet-adapter-wallets@0.10.0/dist/index.umd.js"></script>
 </head>
 <body>
-  <h1>Solana Payment DApp</h1>
+  <h1>Universal Solana Payment DApp</h1>
+
+  <div class="card">
+    <h3>Connect Wallet</h3>
+    <select id="walletSelect"></select>
+    <button id="connectBtn">Connect Wallet</button>
+    <p id="walletStatus" class="muted"></p>
+  </div>
 
   <div class="card">
     <h3>Create Payment</h3>
@@ -17,10 +30,12 @@
     <label>Amount (SOL):</label>
     <input type="number" id="amount" step="0.01" value="0.1">
 
+    <label>Token Mint (optional for SPL):</label>
+    <input type="text" id="tokenMint" placeholder="Leave blank for SOL">
+
     <label>Memo (optional):</label>
     <input type="text" id="memo" placeholder="Payment description">
 
-    <button id="connectBtn">Connect Phantom Wallet</button>
     <button id="createBtn" disabled>Create Invoice</button>
   </div>
 
@@ -28,8 +43,8 @@
     <h3>Invoice</h3>
     <div id="invoiceDetails"></div>
     <div id="qr"></div>
-    <button id="payBtn">Pay with Phantom</button>
-    <div class="muted" id="status">Status: waiting</div>
+    <button id="payBtn">Pay</button>
+    <p id="status" class="muted">Status: waiting</p>
   </div>
 
   <script type="module" src="app.js"></script>
