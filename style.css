@@ -1,0 +1,47 @@
+body { 
+  font-family: Arial, sans-serif; 
+  max-width: 500px; 
+  margin: 20px auto; 
+  padding: 10px; 
+  background:#f9f9f9;
+}
+h1 { 
+  color:#4b00ff; 
+  text-align:center; 
+}
+.card { 
+  border:1px solid #ddd; 
+  border-radius:8px; 
+  padding:16px; 
+  margin-bottom:16px; 
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05); 
+  background:white;
+}
+input, button { 
+  width:100%; 
+  padding:10px; 
+  margin-top:8px; 
+  border-radius:6px; 
+  border:1px solid #ccc; 
+  font-size:1rem; 
+}
+button { 
+  background:#4b00ff; 
+  color:white; 
+  font-weight:bold; 
+  cursor:pointer; 
+  border:none; 
+}
+button:disabled { 
+  background:#aaa; 
+  cursor:not-allowed; 
+}
+#qr img { 
+  width:200px; 
+  margin-top:10px; 
+}
+.muted { 
+  color:#666; 
+  font-size:0.85rem; 
+  margin-top:6px; 
+}
